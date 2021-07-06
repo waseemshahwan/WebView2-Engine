@@ -42,7 +42,7 @@ private:
 	bool _initialized = false;
 	bool _attached = false;
 	string _attachedTaskId;
-	mutex _locked;
+	mutex locker;
 
 	struct config {
 		bool headless = false;
@@ -57,6 +57,8 @@ private:
 	void removeEventHandlers();
 
 public:
+
+	std::function<HRESULT(ICoreWebView2WebResourceRequestedEventArgs*)> interceptFunctor = nullptr;
 
 	// Window & webview related data
 	Window* window;
@@ -76,20 +78,19 @@ public:
 	bool initialize(bool headless, string proxy);
 
 	// Attach / Detach a task (tasks need a gate to operate, and gates shouldnt operate without a task)
-	bool attach(string taskId);
-	// note: detach should delete all intercept rules
-	bool detach();
+	bool lock();
+	bool unlock();
 
 	// Will detach and kill attached task
 	bool terminate();
 
 	// Add intercept rules dynamically, returns intercept rule id (to delete later)
-	string addInterceptRule(InterceptOpts &options, std::function<void(ICoreWebView2WebResourceRequestedEventArgs*)> interceptor);
-	bool removeInterceptRule (string ruleId);
-	bool removeAllInterceptRules();
+	bool intercept(std::function<HRESULT(ICoreWebView2WebResourceRequestedEventArgs*)>);
+	bool removeIntercept();
 
 	bool navigate(string url);
+	void waitForNavigation();
 
 	// Run plain JS code
-	auto execute(string code);
+	void execute(string code);
 };

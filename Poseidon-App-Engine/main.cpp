@@ -49,15 +49,47 @@ int main(void) {
 	Gate* gate = new Gate();
 	gate->initialize(false, "");
 
-	InterceptOpts options{};
+	gate->intercept([gate] (ICoreWebView2WebResourceRequestedEventArgs* args) {
+		cout << "INTERCEPTED!!!!!" << endl;
 
-	options.Path = "*";
+		COREWEBVIEW2_WEB_RESOURCE_CONTEXT resourceContext;
+		args->get_ResourceContext(&resourceContext);
 
-	gate->addInterceptRule(options, [](ICoreWebView2WebResourceRequestedEventArgs* args) {
-		cout << "HEllo World!" << endl;
+		ICoreWebView2WebResourceRequest* request;
+		args->get_Request(&request);
+
+		LPWSTR bufRequestedUri;
+		request->get_Uri(&bufRequestedUri);
+
+		wil::com_ptr<ICoreWebView2_2> webview2;
+		wil::com_ptr<ICoreWebView2Environment> environment;
+		wil::com_ptr<ICoreWebView2WebResourceResponse> response;
+
+		gate->webview.webview->QueryInterface(IID_PPV_ARGS(&webview2));
+		webview2->get_Environment(&environment);
+
+		string resp = "<h1>HELLO WORLD!!!!</h1>";
+
+		BYTE* tByte = new BYTE[resp.length()];
+		memcpy(tByte, resp.c_str(), resp.length());
+
+		wil::com_ptr<IStream> stream = SHCreateMemStream(tByte, resp.length());
+		environment->CreateWebResourceResponse(stream.get(), 200, nullptr, L"Content-Type: text/html", &response);
+		args->put_Response(response.get());
+		args->put_Response(response.get());
+		stream->Release();
+		request->Release();
+		return S_OK;
 	});
+
 	bool success = gate->navigate("https://google.com/");
 	cout << "Success of nav: " << success << endl;
+
+	gate->waitForNavigation();
+
+	cout << "DONE! Switching to apple" << endl;
+
+	gate->execute("location.href = \"https://apple.com\"");
 
 	cin.get();
 
@@ -69,37 +101,3 @@ int main(void) {
 
 	return 0;
 }
-
-/*
-
-			cout << "INTERCEPTED!!!!!" << endl;
-
-			COREWEBVIEW2_WEB_RESOURCE_CONTEXT resourceContext;
-			args->get_ResourceContext(&resourceContext);
-
-			ICoreWebView2WebResourceRequest* request;
-			args->get_Request(&request);
-
-			LPWSTR bufRequestedUri;
-			request->get_Uri(&bufRequestedUri);
-
-			wil::com_ptr<ICoreWebView2_2> webview2;
-			wil::com_ptr<ICoreWebView2Environment> environment;
-			wil::com_ptr<ICoreWebView2WebResourceResponse> response;
-
-			gate->webview.webview->QueryInterface(IID_PPV_ARGS(&webview2));
-			webview2->get_Environment(&environment);
-
-			string resp = "<h1>HELLO WORLD!!!!</h1>";
-
-			BYTE* tByte = new BYTE[resp.length()];
-			memcpy(tByte, resp.c_str(), resp.length());
-
-			wil::com_ptr<IStream> stream = SHCreateMemStream(tByte, resp.length());
-			environment->CreateWebResourceResponse(stream.get(), 200, nullptr, L"Content-Type: application/json", &response);
-			args->put_Response(response.get());
-			args->put_Response(response.get());
-			stream->Release();
-			request->Release();
-			return;
-*/

@@ -8,7 +8,7 @@ using namespace std;
 class Task {
 private:
 	string _id;
-	Gate _gate;
+	Gate* _gate;
 
 	bool _attached = false;
 public:
@@ -17,7 +17,7 @@ public:
 	
 	// getters
 	string id() { return this->_id; }
-	Gate gate() { return this->_gate; }
+	Gate* gate() { return this->_gate; }
 	bool attached() { return this->_attached; }
 
 	// Attach to a gate (cannot operate without a gate)

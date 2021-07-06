@@ -26,7 +26,7 @@ void Gate::addEventHandlers() {
 			Microsoft::WRL::Callback<ICoreWebView2NavigationCompletedEventHandler>(
 				[this](ICoreWebView2* sender, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT
 				{
-					std::cout << "Navigation completed" << std::endl;
+					std::cout << "Navigation completed ==============================" << std::endl;
 					return S_OK;
 				}
 			).Get(),
@@ -194,6 +194,7 @@ bool Gate::initialize(bool headless, string proxy) {
 bool Gate::terminate() {
 	if (!this->initialized()) throw exception("Gate not initialized");
 
+	this->removeIntercept();
 	this->removeEventHandlers();
 
 	this->webview.controller->Close();
@@ -216,15 +217,17 @@ bool Gate::navigate(string url) {
 	return true;
 }
 
-string Gate::addInterceptRule(InterceptOpts &options, std::function<void(ICoreWebView2WebResourceRequestedEventArgs*)> interceptor) {
+bool Gate::intercept(std::function<HRESULT(ICoreWebView2WebResourceRequestedEventArgs*)> interceptor) {
 	cout << "Adding intercept rule" << endl;
 
+	this->interceptFunctor = interceptor;
+
 	EventRegistrationToken filterToken;
-	this->window->RunAsync([this, &filterToken, &options, interceptor] {
-		this->webview.webview->AddWebResourceRequestedFilter(Utility::AS2WS(options.Path).c_str(), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+	this->window->RunAsync([this, &filterToken] {
+		this->webview.webview->AddWebResourceRequestedFilter(L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
 		
 		this->webview.webview->add_WebResourceRequested(
-			Microsoft::WRL::Callback<ICoreWebView2WebResourceRequestedEventHandler>([options, interceptor](ICoreWebView2* sender, ICoreWebView2WebResourceRequestedEventArgs* args) {
+			Microsoft::WRL::Callback<ICoreWebView2WebResourceRequestedEventHandler>([this](ICoreWebView2* sender, ICoreWebView2WebResourceRequestedEventArgs* args) {
 			
 				cout << "Intercept rule triggered" << endl;
 
@@ -239,9 +242,9 @@ string Gate::addInterceptRule(InterceptOpts &options, std::function<void(ICoreWe
 
 				cout << "URI: " << Utility::WS2AS(bufRequestedUri) << endl;
 
-				if (options.Path == "*" || Utility::WS2AS(bufRequestedUri).rfind(options.Path, 0) == 0) {
-					interceptor(args);
-					cout << "Done" << endl;
+				// rules here
+				if (this->interceptFunctor) {
+					return this->interceptFunctor(args);
 				}
 
 				return S_OK;
@@ -249,38 +252,25 @@ string Gate::addInterceptRule(InterceptOpts &options, std::function<void(ICoreWe
 			&filterToken
 		);
 	});
+
 	string id = Utility::RandomString(5);
 	cout << "Intercept rule ID " << id << " added" << endl;
 	this->interceptRemovers.insert(
 		make_pair(
 			id,
-			[this, options, &filterToken] {
-				this->window->RunAsync([this, &filterToken, &options] {
-					this->webview.webview->RemoveWebResourceRequestedFilter(Utility::AS2WS(options.Path).c_str(), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+			[this, &filterToken] {
+				this->window->RunAsync([this, &filterToken] {
+					this->webview.webview->RemoveWebResourceRequestedFilter(L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
 					this->webview.webview->remove_WebResourceRequested(filterToken);
 				});
 			}
 		)
 	);
 
-	return id;
-}
-
-bool Gate::removeInterceptRule(string ruleId) {
-	map<string, std::function<void()>>::iterator it;
-
-	for (it = this->interceptRemovers.begin(); it != this->interceptRemovers.end(); it++)
-	{
-		if (it->first == ruleId) {
-			(it->second)();
-			this->interceptRemovers.erase(it);
-		}
-	}
-
 	return true;
 }
 
-bool Gate::removeAllInterceptRules() {
+bool Gate::removeIntercept() {
 	map<string, std::function<void()>>::iterator it;
 
 	for (it = this->interceptRemovers.begin(); it != this->interceptRemovers.end(); it++)
@@ -289,6 +279,47 @@ bool Gate::removeAllInterceptRules() {
 	}
 
 	this->interceptRemovers.clear();
+	this->interceptFunctor = nullptr;
 
 	return true;
 }
+
+void Gate::execute(string code) {
+	this->window->RunAsync([this, code] {
+		this->webview.webview->ExecuteScript(Utility::AS2WS(code).c_str(), NULL);
+	});
+}
+
+void Gate::waitForNavigation() {
+	bool done = false;
+	EventRegistrationToken frameNavigationCompletedToken;
+	this->window->RunAsync([this, &frameNavigationCompletedToken, &done] {
+		this->webview.webview->add_FrameNavigationCompleted(
+			Microsoft::WRL::Callback<ICoreWebView2NavigationCompletedEventHandler>(
+				[this, &done](ICoreWebView2* sender, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT
+				{
+					done = true;
+					return S_OK;
+				}
+			).Get(),
+			&frameNavigationCompletedToken
+		);
+	});
+
+	while (!done) this_thread::sleep_for(0.1s);
+	this->webview.webview->remove_FrameNavigationCompleted(frameNavigationCompletedToken);
+	return;
+}
+
+bool Gate::lock() {
+	this->locker.lock();
+
+	return true;
+}
+
+bool Gate::unlock() {
+	this->locker.unlock();
+
+	return true;
+}
+
