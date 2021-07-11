@@ -1,3 +1,5 @@
+#pragma warning(disable : 4996)
+
 #include "Utility.h"
 #include <random>
 
@@ -7,6 +9,11 @@
 
 #include "base64.h"
 #include <iostream>
+
+#include "json11.h"
+#include <exception>
+
+using namespace std;
 
 std::random_device rd;
 std::mt19937 mt(rd());
@@ -395,4 +402,14 @@ bool Utility::CleanProfiles() {
 	);
 
 	return true;
+}
+
+json11::Json Utility::ParseJSON(string data) {
+	string error;
+	json11::Json body = json11::Json::parse(data.data(), error, json11::STANDARD);
+	if (!error.empty()) {
+		throw exception(data.c_str());
+	}
+
+	return body;
 }

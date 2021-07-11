@@ -1,11 +1,16 @@
 #pragma once
-#include <Windows.h>
 #include <iostream>
 #include <sstream>
 #include <fstream>
 #include <future>
 #include "shlwapi.h"
 #include "shlobj.h"
+#include <memory>
+#include <string>
+#include <stdexcept>
+#include "json11.h"
+
+using namespace std;
 
 class Utility
 {
@@ -13,6 +18,8 @@ public:
 	Utility();
 	~Utility();
 
+
+	static json11::Json ParseJSON(string);
 	static LPCWSTR ToLPCWSTR(const std::string& s);
 	// Long wide pointer to ascii string 
 	static std::string LP2A(LPWSTR base);

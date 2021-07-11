@@ -1,6 +1,8 @@
-#include <iostream>
-#include "Gate.h"
-#include "Utility.h"
+#include <WinSock2.h> // needs to be included before WebView2.h to prevent include collisions
+//#include "ViewController.h"
+
+//typedef websocketpp::client<websocketpp::config::asio_client> client;
+//typedef websocketpp::config::asio_client::message_type::ptr message_ptr;
 
 /*
 
@@ -18,86 +20,9 @@ Task: Thread which controls browser to solve CAPTCHAs.
 
 */
 
-using namespace std;
+int main() {
 
-int main(void) {
-
-	Utility::CleanProfiles();
-
-	/*while (true) {
-		for (int i = 0; i < 50; i++) {
-			thread t = thread([] {
-				cout << "Started thread: " << this_thread::get_id() << endl;
-				Gate* gate = new Gate();
-				if (!gate->initialize(true, "")) {
-					cout << "Failed" << endl;
-				}
-				else cout << "Success" << endl;
-
-				this_thread::sleep_for(3s);
-
-				gate->terminate();
-				delete gate;
-			});
-
-			t.detach();
-
-		};
-		this_thread::sleep_for(15s);
-	}*/
-
-	Gate* gate = new Gate();
-	gate->initialize(false, "");
-
-	gate->intercept([gate] (ICoreWebView2WebResourceRequestedEventArgs* args) {
-		cout << "INTERCEPTED!!!!!" << endl;
-
-		COREWEBVIEW2_WEB_RESOURCE_CONTEXT resourceContext;
-		args->get_ResourceContext(&resourceContext);
-
-		ICoreWebView2WebResourceRequest* request;
-		args->get_Request(&request);
-
-		LPWSTR bufRequestedUri;
-		request->get_Uri(&bufRequestedUri);
-
-		wil::com_ptr<ICoreWebView2_2> webview2;
-		wil::com_ptr<ICoreWebView2Environment> environment;
-		wil::com_ptr<ICoreWebView2WebResourceResponse> response;
-
-		gate->webview.webview->QueryInterface(IID_PPV_ARGS(&webview2));
-		webview2->get_Environment(&environment);
-
-		string resp = "<h1>HELLO WORLD!!!!</h1>";
-
-		BYTE* tByte = new BYTE[resp.length()];
-		memcpy(tByte, resp.c_str(), resp.length());
-
-		wil::com_ptr<IStream> stream = SHCreateMemStream(tByte, resp.length());
-		environment->CreateWebResourceResponse(stream.get(), 200, nullptr, L"Content-Type: text/html", &response);
-		args->put_Response(response.get());
-		args->put_Response(response.get());
-		stream->Release();
-		request->Release();
-		return S_OK;
-	});
-
-	bool success = gate->navigate("https://google.com/");
-	cout << "Success of nav: " << success << endl;
-
-	gate->waitForNavigation();
-
-	cout << "DONE! Switching to apple" << endl;
-
-	gate->execute("location.href = \"https://apple.com\"");
-
-	cin.get();
-
-	gate->terminate();
-	delete gate;
-
-	cin.get();
 
 
 	return 0;
-}
+};

@@ -31,9 +31,13 @@ struct InterceptOpts {
 class Gate {
 	// Webview related data
 	struct Webview {
-		wil::com_ptr<ICoreWebView2>            webview;
+		wil::com_ptr<ICoreWebView2> webview;
+		wil::com_ptr<ICoreWebView2_2> webview2;
 		wil::com_ptr<ICoreWebView2Environment> environment;
-		wil::com_ptr<ICoreWebView2Controller>  controller;
+		wil::com_ptr<ICoreWebView2Environment2> environment2;
+		wil::com_ptr<ICoreWebView2Environment3> environment3;
+		wil::com_ptr<ICoreWebView2Controller> controller;
+		wil::com_ptr<ICoreWebView2CompositionController> composition;
 	};
 
 private:
@@ -65,7 +69,7 @@ public:
 	thread windowThread;
 	Webview webview;
 
-	Gate();
+	Gate(bool headless, string proxy);
 	~Gate();
 
 	// getters

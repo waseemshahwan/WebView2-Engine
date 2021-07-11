@@ -8,25 +8,41 @@
 #include "WebView2.h"
 #include "WebView2EnvironmentOptions.h"
 #include <vector>
+#include <string>
 #include <exception>
+#include <dcomp.h>
 
 using namespace std;
 
-Gate::Gate() {
+Gate::Gate(bool headless, string proxy) {
 	this->_id = (string)Utility::RandomString(16);
+
+	this->initialize(headless, proxy);
 }
 
-Gate::~Gate() {}
+Gate::~Gate() {
+	this->terminate();
+}
 
 void Gate::addEventHandlers() {
 	// On navigation completed ... do nothing? idk
+
+#ifdef _DEBUG
 	EventRegistrationToken frameNavigationCompletedToken;
+
 	this->window->RunAsync([this, &frameNavigationCompletedToken] {
-		this->webview.webview->add_FrameNavigationCompleted(
-			Microsoft::WRL::Callback<ICoreWebView2NavigationCompletedEventHandler>(
-				[this](ICoreWebView2* sender, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT
+
+		this->webview.webview2->add_DOMContentLoaded(
+			Microsoft::WRL::Callback<ICoreWebView2DOMContentLoadedEventHandler>(
+				[this](ICoreWebView2* sender, ICoreWebView2DOMContentLoadedEventArgs* args) -> HRESULT
 				{
-					std::cout << "Navigation completed ==============================" << std::endl;
+					string script = "let d=document.createElement('div');d.id='circle';d.style.position='fixed';d.style.zIndex='10000';d.style.width='20px';d.style.height='20px';d.style.pointerEvents='none';d.style.borderRadius='20px';d.style.backgroundColor='rgba(0,0,0,0.5)';document.body.insertBefore(d,document.body.firstChild);window.addEventListener('mousemove',function(e){document.getElementById('circle').style.left=(e.clientX-10)+'px';document.getElementById('circle').style.top=(e.clientY-10)+'px'});";
+
+					this->webview.webview->ExecuteScript(
+						Utility::AS2WS(script).c_str(),
+						nullptr
+					);
+
 					return S_OK;
 				}
 			).Get(),
@@ -35,8 +51,10 @@ void Gate::addEventHandlers() {
 	});
 
 	this->eventRemovers.push_back([this, &frameNavigationCompletedToken] {
-		this->webview.webview->remove_FrameNavigationCompleted(frameNavigationCompletedToken);
+		this->webview.webview2->remove_DOMContentLoaded(frameNavigationCompletedToken);
 	});
+
+#endif
 
 	std::cout << "Adding event handler" << std::endl;
 	EventRegistrationToken webMessageReceivedToken;
@@ -103,7 +121,9 @@ bool Gate::initialize(bool headless, string proxy) {
 			"--allow-running-insecure-content",
 			"--enable-low-end-device-mode",
 			"--disable-dev-shm-usage",
-			"--no-sandbox"
+			"--no-sandbox",
+			"--remote-debugging-address=127.0.0.1",
+			"--remote-debugging-port=7728"
 		};
 
 		if (!proxy.empty()) {
@@ -141,17 +161,29 @@ bool Gate::initialize(bool headless, string proxy) {
 	while (!done) this_thread::sleep_for(0.1s);
 
 	// Create the webview2 controller
+
+	wil::com_ptr<ICoreWebView2Environment2> environment2;
+	environment->QueryInterface(IID_PPV_ARGS(&environment2));
+
+	wil::com_ptr<ICoreWebView2Environment3> environment3;
+	environment2->QueryInterface(IID_PPV_ARGS(&environment3));
+
 	done = false;
 	HWND hWindow = this->window->hWindow;
-	this->window->RunAsync([&environment, &hWindow, this, &done] {
-		environment->CreateCoreWebView2Controller(hWindow, Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
-			[this, &done] (HRESULT result, ICoreWebView2Controller * controller) -> HRESULT {
+	this->window->RunAsync([&environment3, &hWindow, this, &done] {
+		environment3->CreateCoreWebView2Controller(hWindow, Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
+			[this, &done] (HRESULT result, ICoreWebView2Controller* controller) -> HRESULT {
 				if (controller == nullptr) {
 					cout << "This failed" << endl;
 					throw exception("There was an error loading the webview controller");
 				}
+
 				this->webview.controller = controller;
+
 				this->webview.controller->get_CoreWebView2(&this->webview.webview);
+				wil::com_ptr<ICoreWebView2_2> webview2;
+				this->webview.webview->QueryInterface(IID_PPV_ARGS(&webview2));
+				this->webview.webview2 = webview2;
 
 				ICoreWebView2Settings* Settings;
 				this->webview.webview->get_Settings(&Settings);
@@ -175,6 +207,8 @@ bool Gate::initialize(bool headless, string proxy) {
 	cout << "Done is true" << endl;
 
 	this->webview.environment = environment;
+	this->webview.environment2 = environment2;
+	this->webview.environment3 = environment3;
 	/*
 	this->window->RunAsync([this] {
 		this->webview.webview->OpenDevToolsWindow();
@@ -183,6 +217,7 @@ bool Gate::initialize(bool headless, string proxy) {
 	this->window->RunAsync([this] {
 		this->webview.webview->Navigate(L"https://google.com");
 	});*/
+
 
 	this->addEventHandlers();
 
@@ -312,13 +347,26 @@ void Gate::waitForNavigation() {
 }
 
 bool Gate::lock() {
-	this->locker.lock();
+	try {
+		this->locker.lock();
+	} catch (exception e) {
+		cout << "Error with lock: " << e.what() << endl;
+		return false;
+	}
 
 	return true;
 }
 
+// Warning caused by VS is a bug:
+// https://developercommunity.visualstudio.com/t/incorrect-lock-warnings-by-analyzer-c26110/670717
 bool Gate::unlock() {
-	this->locker.unlock();
+
+	try {
+		this->locker.unlock();
+	} catch (exception e) {
+		cout << e.what() << endl;
+		return false;
+	}
 
 	return true;
 }
